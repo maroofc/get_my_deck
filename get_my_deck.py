@@ -12,7 +12,7 @@ auth_token  = "from_twilio" ## AS ABOVE
 client = Client(account_sid, auth_token)
 
 browser_options = Options()
-browser_options.headless = True
+browser_options.add_argument("--headless=new")
 url = "https://store.steampowered.com/sale/steamdeckrefurbished"
 
 def start():
