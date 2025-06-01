@@ -1,31 +1,38 @@
 from selenium.webdriver.common.by import By
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.firefox.service import Service
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import time
 from twilio.rest import Client
-from webdriver_manager.chrome import ChromeDriverManager
+from webdriver_manager.firefox import GeckoDriverManager
 from datetime import datetime
+from config import (
+    TWILIO_ACCOUNT_SID,
+    TWILIO_AUTH_TOKEN,
+    TWILIO_PHONE_NUMBER,
+    RECIPIENT_PHONE_NUMBER,
+    STEAM_DECK_URL
+)
 
-account_sid = "from_twilio" ## SIGN UP FOR A FREE TWILIO ACCOUNT AND GET YOUR SID AND AUTH TOKEN 
-auth_token  = "from_twilio" ## AS ABOVE
-client = Client(account_sid, auth_token)
+client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
 browser_options = Options()
-browser_options.add_argument("--headless=new")
-url = "https://store.steampowered.com/sale/steamdeckrefurbished"
+browser_options.add_argument("--headless")
+url = STEAM_DECK_URL
 
 def start():
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=browser_options)
-
-    
+    service = Service(GeckoDriverManager().install())
+    driver = webdriver.Firefox(service=service, options=browser_options)
     driver.get(url)
     return driver
 
 
 def refresh(driver):
     driver.refresh()
+    # Wait for the page to load after refresh
+    time.sleep(5)
 
 
 def quit(driver):
@@ -33,36 +40,46 @@ def quit(driver):
 
 
 def runner(driver):
-    all_btn = driver.find_elements(By.XPATH, "//*[@id='SaleSection_33131']")
-    x = all_btn[0].text
-    x = x.split("00")[0]  ## HERE YOU CAN BREAKPOINT AND DETERMINE WHICH PART OF THE TEXT YOU ARE INTERESTED IN (E.G. STRIP FOR 64GB, 256GB ETC
-    print(x)
-    if "add" in x.lower():
-        message = client.messages.create(
-            to="+44777777777", ## THE NUMBER THE ALERT WILL GO TO
-            from_="+44777777777", ## THE NUMBER PROVIDED BY TWILIO
-            body="In Stock https://store.steampowered.com/sale/steamdeckrefurbished")
-        status = 1
-    else:
-        print(x)
-        print(datetime.now())
-        status = 0
-    return status
+    try:
+        # Wait up to 10 seconds for the element to be present
+        wait = WebDriverWait(driver, 10)
+        stock_element = wait.until(
+            EC.presence_of_element_located((By.XPATH, "//div[contains(@class, 'CartBtn')]/span"))
+        )
+        
+        x = stock_element.text.strip()
+        print("Found text:", x)
+        
+        if "Out of stock" not in x:
+            # message = client.messages.create(
+            #     to=RECIPIENT_PHONE_NUMBER,
+            #     from_=TWILIO_PHONE_NUMBER,
+            #     body=f"In Stock {STEAM_DECK_URL}")
+            print("Message sent - Steam Deck is in stock!")
+            status = 1
+        else:
+            print("Current status:", x)
+            print("Time checked:", datetime.now())
+            status = 0
+        return status
+    except Exception as e:
+        print(f"Error occurred: {str(e)}")
+        return 0
 
 
 def get_my_deck():
-    c= 0
+    c = 0
     driver = start()
     time.sleep(10) ## DO NOT EDIT
     print("Started Scraper")
     while True:
         try:
-            if c<11:
+            if c < 11:
                 status = runner(driver)
                 if status == 1:
                     break
                 time.sleep(20) ## HOW OFTEN TO CHECK THE WEBSITE
-                c = c+1
+                c = c + 1
                 refresh(driver)
             else:
                 print("Rebooting")
@@ -71,7 +88,7 @@ def get_my_deck():
                 c = 0
                 driver = start()
         except Exception as e:
-            print(e)
+            print(f"Main loop error: {str(e)}")
             driver.quit()
             time.sleep(20) ## DO NOT EDIT
             get_my_deck()
